@@ -69,7 +69,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 let fresh = false;
 let db = load();
 let tab = "input";
-let form = blank();
+let visitForm = blank();
 let filter = { q: "", tag: "", sort: "visits", month: "", unpaid: false };
 let detailId = null;
 
@@ -230,60 +230,66 @@ function toast(m) {
   document.body.appendChild(e); setTimeout(() => e.remove(), 1800);
 }
 
+function inputTagsHtml() {
+  const tagPick = PRESET_TAGS.map(t => `<span class="tag pick ${visitForm.tags.includes(t) ? "on" : ""}" onclick="toggleTag('${t}')">${t}</span>`).join("");
+  const extra = visitForm.tags.filter(t => !PRESET_TAGS.includes(t)).map(t => `<span class="tag pick on" onclick="toggleTag('${jsq(t)}')">${esc(t)}</span>`).join("");
+  return tagPick + extra;
+}
 function viewInput() {
-  const f = form, c = cust(f.customerId);
-  const tagPick = PRESET_TAGS.map(t => `<span class="tag pick ${f.tags.includes(t) ? "on" : ""}" onclick="toggleTag('${t}')">${t}</span>`).join("");
-  const extra = f.tags.filter(t => !PRESET_TAGS.includes(t)).map(t => `<span class="tag pick on" onclick="toggleTag('${jsq(t)}')">${esc(t)}</span>`).join("");
+  const f = visitForm, c = cust(f.customerId);
   return `
   <div class="card">
-    <label>日付</label><input type="date" value="${f.date}" onchange="form.date=this.value">
+    <label>日付</label><input type="date" value="${f.date}" onchange="visitForm.date=this.value">
     <label>お客様</label>
     <input list="cl" id="cname" placeholder="名前を入力 / 選択(新規は自動登録)" value="${esc(c?.name || f.newName)}" onchange="pickCustomer(this.value)">
     <datalist id="cl">${db.customers.map(x => `<option value="${esc(x.name)}">`).join("")}</datalist>
     <label>人数</label>
     <div class="row"><button class="step" onclick="people(-1)">−</button><span class="num">${f.people}</span><button class="step" onclick="people(1)">＋</button><span class="muted">名</span></div>
     <label>お連れ様のお名前(任意)</label>
-    <textarea rows="2" placeholder="例: 山田 花子&#10;複数名は改行または読点で区切れます" oninput="form.companions=this.value">${esc(f.companions)}</textarea>
-    <label>金額(円)</label>
-    <input type="number" inputmode="numeric" placeholder="例 45000" value="${f.amount}" oninput="form.amount=this.value">
+    <textarea rows="2" placeholder="例: 山田 花子&#10;複数名は改行または読点で区切れます" oninput="visitForm.companions=this.value">${esc(f.companions)}</textarea>
+    <label for="amount">金額(円)</label>
+    <input id="amount" type="text" inputmode="numeric" placeholder="例 45000" value="${esc(f.amount)}" oninput="visitForm.amount=this.value">
     <label>支払い方法</label>
-    <div class="seg">${PAY.map(p => `<button class="${f.pay === p ? "on" : ""}" onclick="form.pay='${p}';render()">${p}</button>`).join("")}</div>
+    <div class="seg">${PAY.map(p => `<button class="${f.pay === p ? "on" : ""}" onclick="visitForm.pay='${p}';render()">${p}</button>`).join("")}</div>
     <label>領収書</label>
     <div class="seg">
-      <button class="${!f.receipt ? "on" : ""}" onclick="form.receipt=false;render()">なし</button>
-      <button class="${f.receipt ? "on" : ""}" onclick="form.receipt=true;render()">あり</button>
+      <button class="${!f.receipt ? "on" : ""}" onclick="visitForm.receipt=false;render()">なし</button>
+      <button class="${f.receipt ? "on" : ""}" onclick="visitForm.receipt=true;render()">あり</button>
     </div>
-    ${f.receipt ? `<label>宛名</label><input id="addr" placeholder="例 株式会社○○ 様" value="${esc(f.addressee)}" oninput="form.addressee=this.value">` : ""}
+    ${f.receipt ? `<label>宛名</label><input id="addr" placeholder="例 株式会社○○ 様" value="${esc(f.addressee)}" oninput="visitForm.addressee=this.value">` : ""}
     <label>軽い会話内容</label>
-    <textarea rows="3" placeholder="🎤 キーボードのマイクで音声入力もOK" oninput="form.memo=this.value">${esc(f.memo)}</textarea>
+    <textarea rows="3" placeholder="🎤 キーボードのマイクで音声入力もOK" oninput="visitForm.memo=this.value">${esc(f.memo)}</textarea>
     <label>お客様タグ(タップで追加)</label>
-    <div>${tagPick}${extra}</div>
+    <div id="input-tags">${inputTagsHtml()}</div>
     <input style="margin-top:8px" placeholder="新しいタグを追加して Enter" onkeydown="if(event.key==='Enter'){addTag(this.value);event.preventDefault()}">
     <button class="big" onclick="submitVisit()">保存する</button>
   </div>`;
 }
-function people(d) { form.people = Math.max(1, form.people + d); render(); }
-function toggleTag(t) { form.tags = form.tags.includes(t) ? form.tags.filter(x => x !== t) : [...form.tags, t]; render(); }
-function addTag(t) { t = t.trim(); if (t && !form.tags.includes(t)) form.tags.push(t); render(); }
+function people(d) { visitForm.people = Math.max(1, visitForm.people + d); render(); }
+function toggleTag(t) { visitForm.tags = visitForm.tags.includes(t) ? visitForm.tags.filter(x => x !== t) : [...visitForm.tags, t]; render(); }
+function addTag(t) { t = t.trim(); if (t && !visitForm.tags.includes(t)) visitForm.tags.push(t); render(); }
 function pickCustomer(name) {
   name = name.trim();
   const c = db.customers.find(x => x.name === name);
-  form.customerId = c ? c.id : ""; form.newName = c ? "" : name;
-  if (c) form.tags = [...new Set([...form.tags, ...c.tags])];
-  render();
+  visitForm.customerId = c ? c.id : ""; visitForm.newName = c ? "" : name;
+  if (c) visitForm.tags = [...new Set([...visitForm.tags, ...c.tags])];
+  $("#input-tags").innerHTML = inputTagsHtml();
 }
 function submitVisit() {
   const name = ($("#cname").value || "").trim();
   if (!name) return toast("お客様名を入力してください");
-  if (form.amount === "" || Number(form.amount) < 0) return toast("金額を入力してください");
-  if (form.receipt && !form.addressee.trim()) return toast("宛名を入力してください");
+  const amountText = visitForm.amount.normalize("NFKC").replace(/[,\s]/g, "");
+  if (!/^\d+$/.test(amountText) || !Number.isSafeInteger(Number(amountText))) {
+    return toast("金額は0以上の整数で入力してください");
+  }
+  if (visitForm.receipt && !visitForm.addressee.trim()) return toast("宛名を入力してください");
   let c = db.customers.find(x => x.name === name);
   if (!c) { c = { id: uid(), name, birthMonth: "", birthDay: "", birthYear: "", phone: "", note: "", tags: [] }; db.customers.push(c); }
-  c.tags = [...new Set([...c.tags, ...form.tags])];
-  db.visits.push({ id: uid(), date: form.date, customerId: c.id, people: form.people, amount: Number(form.amount),
-    companions: form.companions.split(/[\n、,，]/).map(name => name.trim()).filter(Boolean),
-    pay: form.pay, paid: form.pay !== "貸し", receipt: form.receipt, addressee: form.receipt ? form.addressee.trim() : "", memo: form.memo.trim() });
-  save(); form = blank(); toast("保存しました ✔"); render(); scrollTo(0, 0);
+  c.tags = [...new Set([...c.tags, ...visitForm.tags])];
+  db.visits.push({ id: uid(), date: visitForm.date, customerId: c.id, people: visitForm.people, amount: Number(amountText),
+    companions: visitForm.companions.split(/[\n、,，]/).map(name => name.trim()).filter(Boolean),
+    pay: visitForm.pay, paid: visitForm.pay !== "貸し", receipt: visitForm.receipt, addressee: visitForm.receipt ? visitForm.addressee.trim() : "", memo: visitForm.memo.trim() });
+  save(); visitForm = blank(); toast("保存しました ✔"); render(); scrollTo(0, 0);
 }
 
 function viewHome() {
