@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="app-mode" content="demo">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14121f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="日報CRM">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<title>夜の日報CRM</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:#14121f;color:#eee;padding-bottom:76px}
+header{padding:10px 12px;font-weight:700;font-size:16px;background:#1f1b33;position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px}
+header small{font-weight:400;color:#aaa;font-size:12px}
+#install{flex:none;padding:7px 9px;border:1px solid #625a87;border-radius:8px;background:#302b48;color:#ffcf5c;font-size:12px}
+#syncinfo{min-width:0;text-align:right}
+main{padding:12px;max-width:640px;margin:auto}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#1f1b33;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 0;background:none;border:0;color:#999;font-size:13px}
+nav button.on{color:#ffcf5c;font-weight:700}
+.card{background:#231f3a;border-radius:12px;padding:12px;margin-bottom:10px}
+label{display:block;font-size:12px;color:#aaa;margin:12px 0 4px}
+input,textarea,select{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #3a3560;background:#171428;color:#fff}
+.row{display:flex;gap:8px;align-items:center}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;padding:14px 4px;font-size:16px;border-radius:10px;border:2px solid #3a3560;background:#171428;color:#ddd}
+.seg button.on{border-color:#ffcf5c;background:#3a3150;color:#ffcf5c;font-weight:700}
+.step{width:52px;height:52px;font-size:24px;border-radius:10px;border:0;background:#3a3560;color:#fff}
+.num{font-size:26px;min-width:48px;text-align:center}
+.big{width:100%;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:12px;background:#ffcf5c;color:#222;margin-top:16px}
+.tag{display:inline-block;background:#3a3560;border-radius:12px;padding:3px 10px;font-size:12px;margin:2px 4px 2px 0}
+.tag.vip{background:#b8860b;color:#fff}
+.tag.pick{cursor:pointer}.tag.pick.on{background:#ffcf5c;color:#222}
+.muted{color:#999;font-size:12px}
+.amt{color:#ffcf5c;font-weight:700}
+.warn{color:#ff7b7b}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:#171428;border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:20px;color:#ffcf5c}
+.banner{background:#4a2a5a;border-radius:10px;padding:10px;margin-bottom:10px}
+.sm{padding:8px 12px;font-size:13px;border-radius:8px;border:0;background:#3a3560;color:#fff}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#2e7d32;padding:10px 18px;border-radius:20px;z-index:9}
+</style>
+</head>
+<body>
+<header><span>🌙 夜の日報CRM</span><small id="syncinfo"><span id="sync"></span> <span id="today"></span></small><button id="install" type="button">📲 アプリ追加</button></header>
+<aside id="demo-notice" class="banner" style="margin:12px auto;max-width:640px" hidden>操作体験デモです。入力はこの端末内だけに保存され、他の人とは共有されません。実際のお客様の個人情報は入力しないでください。</aside>
+<main id="app"></main>
+<nav id="nav"></nav>
+<script>
+const KEY = "nightly-crm-v1";
+const DEMO = document.querySelector('meta[name="app-mode"]')?.content === "demo";
+const VIP_LIMIT = 24; // 年間来店数でVIP自動タグ (デモ用の仮設定)
+const PAY = ["カード", "現金", "貸し"];
+const PRESET_TAGS = ["ゴルフ", "誕生日", "同伴希望", "接待", "常連", "ワイン好き", "禁煙席"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const jsq = s => String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+const yen = n => "¥" + Number(n || 0).toLocaleString();
+const pad = n => String(n).padStart(2, "0");
+const dstr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+let fresh = false;
+let db = load();
+let tab = "input";
+let form = blank();
+let filter = { q: "", tag: "", sort: "visits", month: "", unpaid: false };
+let detailId = null;
+
+function blank() {
+  return { date: dstr(new Date()), customerId: "", newName: "", people: 1, amount: "", pay: "カード",
+           receipt: false, addressee: "", memo: "", tags: [] };
+}
+function load() {
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.customers && d.visits) return d; } catch (e) {}
+  fresh = true;
+  return seed();
+}
+// ---- サーバー同期 (server.js が無い場合はローカル保存のみ) ----
+// レコード単位のマージ: id ごとに更新時刻(ts)が新しい方を採用。複数人が別のお客様・来店を同時に編集しても失われない
+let online = false, syncing = false, dirty = false, seeded = false, snap = {};
+const headers = () => ({ "Content-Type": "application/json", "X-Passcode": localStorage.getItem(KEY + "-pass") || "" });
+function merge(base, inc) {
+  const out = {};
+  for (const k of ["customers", "visits"]) {
+    const m = new Map(base[k].map(r => [r.id, r]));
+    for (const r of inc[k]) { const o = m.get(r.id); if (!o || (r.ts || 0) > (o.ts || 0)) m.set(r.id, r); }
+    out[k] = [...m.values()];
+  }
+  return out;
+}
+const mine = () => seeded ? db : { customers: db.customers.filter(r => r.ts), visits: db.visits.filter(r => r.ts) };
+function stamp() {
+  const now = Date.now();
+  for (const r of [...db.customers, ...db.visits]) {
+    const s = JSON.stringify(r, (k, v) => k === "ts" ? undefined : v);
+    if (snap[r.id] !== s) { r.ts = now; snap[r.id] = s; }
+  }
+}
+function snapshot() { snap = {}; for (const r of [...db.customers, ...db.visits]) snap[r.id] = JSON.stringify(r, (k, v) => k === "ts" ? undefined : v); }
+function save() {
+  stamp(); localStorage.setItem(KEY, JSON.stringify(db)); dirty = true;
+  if (!DEMO) push();
+}
+snapshot();
+dirty = mine().customers.length + mine().visits.length > 0; // 前回オフライン中の変更を再送
+async function push() {
+  if (!online || syncing) return;
+  syncing = true;
+  try {
+    while (dirty) {
+      dirty = false;
+      const r = await fetch("api/data", { method: "PUT", headers: headers(), body: JSON.stringify({ db: mine() }) });
+      if (!r.ok) throw new Error(r.status);
+      const s = await r.json();
+      seeded = false;
+      adopt(s.db);
+    }
+    setStatus("🟢 共有中");
+  } catch (e) { dirty = true; setStatus("🔴 同期失敗"); }
+  syncing = false;
+}
+function adopt(remote) {
+  const before = JSON.stringify(db);
+  db = merge(remote, mine());
+  snapshot();
+  localStorage.setItem(KEY, JSON.stringify(db));
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
+  if (JSON.stringify(db) !== before && !typing) render();
+}
+async function pull() {
+  try {
+    const r = await fetch("api/data", { headers: headers(), cache: "no-store" });
+    if (r.status === 401) {
+      const p = prompt("合言葉を入力してください"); if (p === null) return setStatus("🔒 未認証");
+      localStorage.setItem(KEY + "-pass", p); return pull();
+    }
+    if (!r.ok) throw new Error(r.status);
+    const s = await r.json();
+    online = true;
+    if (!s.db) { seeded = fresh; dirty = true; await push(); }
+    else if (dirty) await push();
+    else if (!syncing) { seeded = false; adopt(s.db); }
+    setStatus("🟢 共有中");
+  } catch (e) { setStatus(online ? "🔴 オフライン" : "💾 ローカル"); }
+}
+function setStatus(t) { const e = $("#sync"); if (e) e.textContent = t; }
+
+function seed() {
+  const now = new Date(), y = now.getFullYear();
+  const mk = (name, bm, bd, tags, note) => ({ id: uid(), name, birthMonth: bm, birthDay: bd, birthYear: "", phone: "", note, tags });
+  const nextMonth = now.getMonth() % 12 + 2 > 12 ? 1 : now.getMonth() + 2;
+  const cs = [
+    mk("田中 一郎", now.getMonth() + 1, Math.min(28, now.getDate() + 3), ["ゴルフ", "接待"], "ハイボール派"),
+    mk("佐藤 花子", nextMonth, 12, ["ワイン好き"], ""),
+    mk("鈴木 健", 3, 8, ["同伴希望", "常連"], "娘さんが受験生"),
+    mk("高橋 美咲", 11, 22, ["誕生日"], ""),
+    mk("山本 社長", 7, 1, ["接待", "ゴルフ"], "支払いは基本カード"),
+  ];
+  const visits = [];
+  const memos = ["ゴルフの話で盛り上がった", "新車を検討中", "出張が多いらしい", "息子さんの進学の話", "最近ジムに通い始めた"];
+  const counts = [26, 9, 14, 4, 11];
+  const span = Math.max(20, Math.round((now - new Date(y, 0, 1)) / 864e5));
+  cs.forEach((c, i) => {
+    for (let k = 0; k < counts[i]; k++) {
+      const off = Math.floor(k * span / counts[i]) + (i % 3);
+      const dt = new Date(y, now.getMonth(), now.getDate() - off);
+      if (dt.getFullYear() !== y) continue;
+      const pay = (k + i) % 6 === 0 ? "貸し" : (k + i) % 2 ? "カード" : "現金";
+      const rc = pay === "カード" && k % 3 === 0;
+      visits.push({ id: uid(), date: dstr(dt), customerId: c.id, people: 1 + (k % 4),
+        amount: 15000 + ((k * 7 + i * 3) % 12) * 5000, pay, paid: pay !== "貸し" || k > 2,
+        receipt: rc, addressee: rc ? c.name.replace(" ", "") + " 様" : "", memo: memos[(k + i) % memos.length] });
+    }
+  });
+  cs.slice(0, 3).forEach((c, i) => {
+    for (let k = 0; k < 8 + i * 3; k++) {
+      visits.push({ id: uid(), date: dstr(new Date(y - 1, k % 12, 5 + k)), customerId: c.id, people: 2,
+        amount: 20000, pay: "カード", paid: true, receipt: false, addressee: "", memo: "" });
+    }
+  });
+  return { customers: cs, visits };
+}
+
+const cust = id => db.customers.find(c => c.id === id);
+function stats(c) {
+  const vs = db.visits.filter(v => v.customerId === c.id).sort((a, b) => b.date.localeCompare(a.date));
+  const y = new Date().getFullYear();
+  const thisYear = vs.filter(v => v.date.startsWith(y + "-")).length;
+  const lastYear = vs.filter(v => v.date.startsWith((y - 1) + "-")).length;
+  const total = vs.reduce((s, v) => s + Number(v.amount), 0);
+  const unpaid = vs.filter(v => v.pay === "貸し" && !v.paid).reduce((s, v) => s + Number(v.amount), 0);
+  const years = {};
+  vs.forEach(v => { const k = v.date.slice(0, 4); years[k] = (years[k] || 0) + 1; });
+  return { vs, thisYear, lastYear, total, unpaid, years, count: vs.length,
+           avg: vs.length ? Math.round(total / vs.length) : 0, last: vs[0]?.date };
+}
+const allTags = (c, s) => s.thisYear >= VIP_LIMIT ? ["VIP", ...c.tags] : c.tags;
+function daysUntilBirthday(c) {
+  if (!c.birthMonth || !c.birthDay) return null;
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  let b = new Date(t.getFullYear(), c.birthMonth - 1, c.birthDay);
+  if (b < t) b = new Date(t.getFullYear() + 1, c.birthMonth - 1, c.birthDay);
+  return Math.round((b - t) / 864e5);
+}
+function age(c) {
+  if (!c.birthYear || !c.birthMonth || !c.birthDay) return "";
+  const t = new Date();
+  let a = t.getFullYear() - c.birthYear;
+  if (t < new Date(t.getFullYear(), c.birthMonth - 1, c.birthDay)) a--;
+  return a + "歳";
+}
+const tagHtml = tags => tags.map(t => `<span class="tag ${t === "VIP" ? "vip" : ""}">${esc(t)}</span>`).join("");
+
+function render() {
+  $("#today").textContent = new Date().toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" });
+  const tabs = [["input", "✏️ 入力"], ["home", "🏠 ホーム"], ["customers", "👥 顧客"], ["unpaid", "💴 貸し"]];
+  $("#nav").innerHTML = tabs.map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="go('${k}')">${l}</button>`).join("");
+  $("#app").innerHTML = { input: viewInput, home: viewHome, customers: viewCustomers, unpaid: viewUnpaid }[tab]();
+}
+function go(t) { tab = t; detailId = null; render(); scrollTo(0, 0); }
+function toast(m) {
+  const e = document.createElement("div"); e.className = "toast"; e.textContent = m;
+  document.body.appendChild(e); setTimeout(() => e.remove(), 1800);
+}
+
+function viewInput() {
+  const f = form, c = cust(f.customerId);
+  const tagPick = PRESET_TAGS.map(t => `<span class="tag pick ${f.tags.includes(t) ? "on" : ""}" onclick="toggleTag('${t}')">${t}</span>`).join("");
+  const extra = f.tags.filter(t => !PRESET_TAGS.includes(t)).map(t => `<span class="tag pick on" onclick="toggleTag('${jsq(t)}')">${esc(t)}</span>`).join("");
+  return `
+  <div class="card">
+    <label>日付</label><input type="date" value="${f.date}" onchange="form.date=this.value">
+    <label>お客様</label>
+    <input list="cl" id="cname" placeholder="名前を入力 / 選択(新規は自動登録)" value="${esc(c?.name || f.newName)}" onchange="pickCustomer(this.value)">
+    <datalist id="cl">${db.customers.map(x => `<option value="${esc(x.name)}">`).join("")}</datalist>
+    <label>人数</label>
+    <div class="row"><button class="step" onclick="people(-1)">−</button><span class="num">${f.people}</span><button class="step" onclick="people(1)">＋</button><span class="muted">名</span></div>
+    <label>金額(円)</label>
+    <input type="number" inputmode="numeric" placeholder="例 45000" value="${f.amount}" oninput="form.amount=this.value">
+    <label>支払い方法</label>
+    <div class="seg">${PAY.map(p => `<button class="${f.pay === p ? "on" : ""}" onclick="form.pay='${p}';render()">${p}</button>`).join("")}</div>
+    <label>領収書</label>
+    <div class="seg">
+      <button class="${!f.receipt ? "on" : ""}" onclick="form.receipt=false;render()">なし</button>
+      <button class="${f.receipt ? "on" : ""}" onclick="form.receipt=true;render()">あり</button>
+    </div>
+    ${f.receipt ? `<label>宛名</label><input id="addr" placeholder="例 株式会社○○ 様" value="${esc(f.addressee)}" oninput="form.addressee=this.value">` : ""}
+    <label>軽い会話内容</label>
+    <textarea rows="3" placeholder="🎤 キーボードのマイクで音声入力もOK" oninput="form.memo=this.value">${esc(f.memo)}</textarea>
+    <label>お客様タグ(タップで追加)</label>
+    <div>${tagPick}${extra}</div>
+    <input style="margin-top:8px" placeholder="新しいタグを追加して Enter" onkeydown="if(event.key==='Enter'){addTag(this.value);event.preventDefault()}">
+    <button class="big" onclick="submitVisit()">保存する</button>
+  </div>`;
+}
+function people(d) { form.people = Math.max(1, form.people + d); render(); }
+function toggleTag(t) { form.tags = form.tags.includes(t) ? form.tags.filter(x => x !== t) : [...form.tags, t]; render(); }
+function addTag(t) { t = t.trim(); if (t && !form.tags.includes(t)) form.tags.push(t); render(); }
+function pickCustomer(name) {
+  name = name.trim();
+  const c = db.customers.find(x => x.name === name);
+  form.customerId = c ? c.id : ""; form.newName = c ? "" : name;
+  if (c) form.tags = [...new Set([...form.tags, ...c.tags])];
+  render();
+}
+function submitVisit() {
+  const name = ($("#cname").value || "").trim();
+  if (!name) return toast("お客様名を入力してください");
+  if (form.amount === "" || Number(form.amount) < 0) return toast("金額を入力してください");
+  if (form.receipt && !form.addressee.trim()) return toast("宛名を入力してください");
+  let c = db.customers.find(x => x.name === name);
+  if (!c) { c = { id: uid(), name, birthMonth: "", birthDay: "", birthYear: "", phone: "", note: "", tags: [] }; db.customers.push(c); }
+  c.tags = [...new Set([...c.tags, ...form.tags])];
+  db.visits.push({ id: uid(), date: form.date, customerId: c.id, people: form.people, amount: Number(form.amount),
+    pay: form.pay, paid: form.pay !== "貸し", receipt: form.receipt, addressee: form.receipt ? form.addressee.trim() : "", memo: form.memo.trim() });
+  save(); form = blank(); toast("保存しました ✔"); render(); scrollTo(0, 0);
+}
+
+function viewHome() {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+  const bdays = db.customers.map(c => ({ c, d: daysUntilBirthday(c) })).filter(x => x.d !== null && x.d <= 30).sort((a, b) => a.d - b.d);
+  const monthVisits = db.visits.filter(v => v.date.startsWith(`${y}-${pad(m)}`));
+  const sales = monthVisits.reduce((s, v) => s + Number(v.amount), 0);
+  const unpaid = db.visits.filter(v => v.pay === "貸し" && !v.paid).reduce((s, v) => s + Number(v.amount), 0);
+  const gone = db.customers.map(c => ({ c, s: stats(c) })).filter(x => x.s.last && (now - new Date(x.s.last)) / 864e5 >= 21)
+    .sort((a, b) => a.s.last.localeCompare(b.s.last));
+  const byDay = {};
+  monthVisits.forEach(v => byDay[v.date] = (byDay[v.date] || 0) + Number(v.amount));
+  const days = Object.keys(byDay).sort().slice(-14), max = Math.max(1, ...days.map(d => byDay[d]));
+  return `
+  ${bdays.filter(x => x.d <= 7).map(x => `<div class="banner">🎂 ${esc(x.c.name)} 様の誕生日${x.d === 0 ? "は<b>今日</b>です" : `まであと<b>${x.d}日</b>`}</div>`).join("")}
+  <div class="card"><div class="stats">
+    <div class="stat"><b>${yen(sales)}</b>${m}月の売上</div>
+    <div class="stat"><b>${monthVisits.length}</b>${m}月の来店組数</div>
+    <div class="stat"><b>${yen(unpaid)}</b>未収(貸し)</div>
+    <div class="stat"><b>${db.customers.length}</b>登録顧客数</div></div></div>
+  <div class="card"><b>売上推移(今月・直近の営業日)</b>
+    <div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:8px">
+    ${days.map(d => `<div style="flex:1;background:#ffcf5c;height:${Math.max(4, byDay[d] / max * 100)}%;border-radius:3px 3px 0 0" title="${d} ${yen(byDay[d])}"></div>`).join("") || '<span class="muted">データなし</span>'}
+    </div></div>
+  <div class="card"><b>🎂 30日以内の誕生日</b>
+    ${bdays.map(x => `<div class="row" style="justify-content:space-between;padding:6px 0" onclick="openDetail('${x.c.id}')"><span>${esc(x.c.name)}</span><span class="muted">${x.c.birthMonth}/${x.c.birthDay}(あと${x.d}日)</span></div>`).join("") || '<div class="muted">該当なし</div>'}
+  </div>
+  <div class="card"><b>📞 3週間以上ご無沙汰</b>
+    ${gone.map(x => `<div class="row" style="justify-content:space-between;padding:6px 0" onclick="openDetail('${x.c.id}')"><span>${esc(x.c.name)}</span><span class="muted">最終 ${x.s.last}</span></div>`).join("") || '<div class="muted">該当なし</div>'}
+  </div>
+  <div class="card"><button class="sm" onclick="resetDemo()">デモデータに戻す</button></div>`;
+}
+function resetDemo() {
+  if (!confirm("全データをデモデータに戻します。よろしいですか?")) return;
+  db = seed(); save(); render();
+}
+
+function filtered() {
+  const q = filter.q;
+  const list = db.customers.map(c => ({ c, s: stats(c) })).filter(({ c, s }) => {
+    if (q && !(c.name + c.note + c.tags.join("")).includes(q)) return false;
+    if (filter.tag && !allTags(c, s).includes(filter.tag)) return false;
+    if (filter.month && Number(c.birthMonth) !== Number(filter.month)) return false;
+    if (filter.unpaid && !s.unpaid) return false;
+    return true;
+  });
+  const sorters = { visits: (a, b) => b.s.thisYear - a.s.thisYear, total: (a, b) => b.s.total - a.s.total,
+    last: (a, b) => (b.s.last || "").localeCompare(a.s.last || ""), bday: (a, b) => (daysUntilBirthday(a.c) ?? 999) - (daysUntilBirthday(b.c) ?? 999) };
+  return list.sort(sorters[filter.sort]);
+}
+function viewCustomers() {
+  if (detailId && cust(detailId)) return viewDetail(cust(detailId));
+  const tags = [...new Set(db.customers.flatMap(c => c.tags))];
+  return `
+  <div class="card">
+    <input placeholder="🔍 名前・タグ・メモで検索" value="${esc(filter.q)}" oninput="filter.q=this.value;$('#list').innerHTML=listHtml(filtered())">
+    <div class="row" style="margin-top:8px">
+      <select onchange="filter.sort=this.value;render()">
+        ${[["visits", "年間来店数順"], ["total", "累計金額順"], ["last", "最終来店順"], ["bday", "誕生日が近い順"]].map(([k, l]) => `<option value="${k}" ${filter.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select onchange="filter.month=this.value;render()"><option value="">誕生月:全て</option>
+        ${[...Array(12)].map((_, i) => `<option value="${i + 1}" ${filter.month == i + 1 ? "selected" : ""}>${i + 1}月</option>`).join("")}</select>
+    </div>
+    <div style="margin-top:8px">
+      <span class="tag pick ${!filter.tag ? "on" : ""}" onclick="filter.tag='';render()">全て</span>
+      ${["VIP", ...tags].map(t => `<span class="tag pick ${filter.tag === t ? "on" : ""}" onclick="filter.tag='${jsq(t)}';render()">${esc(t)}</span>`).join("")}
+      <span class="tag pick ${filter.unpaid ? "on" : ""}" onclick="filter.unpaid=!filter.unpaid;render()">未収あり</span>
+    </div>
+  </div>
+  <div id="list">${listHtml(filtered())}</div>
+  <button class="big" onclick="newCustomer()">＋ 顧客を追加</button>`;
+}
+function listHtml(list) {
+  return list.map(({ c, s }) => `
+  <div class="card" onclick="openDetail('${c.id}')">
+    <div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b><span class="amt">${s.thisYear}回/年</span></div>
+    <div>${tagHtml(allTags(c, s))}</div>
+    <div class="muted">累計 ${yen(s.total)} ・ 最終 ${s.last || "—"}${c.birthMonth ? ` ・ 🎂${c.birthMonth}/${c.birthDay}` : ""}${s.unpaid ? ` ・ <span class="warn">未収 ${yen(s.unpaid)}</span>` : ""}</div>
+  </div>`).join("") || '<div class="muted" style="text-align:center">該当するお客様がいません</div>';
+}
+function openDetail(id) { tab = "customers"; detailId = id; render(); scrollTo(0, 0); }
+function newCustomer() {
+  const name = prompt("お客様の名前"); if (!name || !name.trim()) return;
+  const c = { id: uid(), name: name.trim(), birthMonth: "", birthDay: "", birthYear: "", phone: "", note: "", tags: [] };
+  db.customers.push(c); save(); openDetail(c.id);
+}
+
+function viewDetail(c) {
+  const s = stats(c), y = new Date().getFullYear(), bd = daysUntilBirthday(c);
+  const yrs = Object.keys(s.years).sort().reverse();
+  return `
+  <button class="sm" onclick="go('customers')">← 一覧へ</button>
+  <div class="card" style="margin-top:10px">
+    <div class="row" style="justify-content:space-between"><b style="font-size:20px">${esc(c.name)}</b><span class="muted">${age(c)}</span></div>
+    <div>${tagHtml(allTags(c, s))}</div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><b>${s.thisYear}</b>${y}年の来店数</div>
+      <div class="stat"><b>${s.lastYear}</b>${y - 1}年の来店数</div>
+      <div class="stat"><b>${s.count}</b>累計来店数</div>
+      <div class="stat"><b>${yen(s.total)}</b>累計金額</div>
+      <div class="stat"><b>${yen(s.avg)}</b>平均客単価</div>
+      <div class="stat"><b style="font-size:15px">${s.last || "—"}</b>最終来店</div>
+    </div>
+    <div class="muted" style="margin-top:8px">年別:${yrs.map(k => `${k}年 ${s.years[k]}回`).join(" / ") || "—"}</div>
+    ${bd !== null ? `<div class="muted">🎂 次の誕生日まであと${bd}日</div>` : ""}
+    ${s.thisYear < VIP_LIMIT ? `<div class="muted">VIPまであと${VIP_LIMIT - s.thisYear}回</div>` : ""}
+  </div>
+  <div class="card"><b>プロフィール編集</b>
+    <label>誕生日(月 / 日 / 年は任意)</label>
+    <div class="row">
+      <input type="number" inputmode="numeric" placeholder="月" min="1" max="12" value="${c.birthMonth}" onchange="upd('${c.id}','birthMonth',this.value)">
+      <input type="number" inputmode="numeric" placeholder="日" min="1" max="31" value="${c.birthDay}" onchange="upd('${c.id}','birthDay',this.value)">
+      <input type="number" inputmode="numeric" placeholder="年" value="${c.birthYear}" onchange="upd('${c.id}','birthYear',this.value)">
+    </div>
+    <label>連絡先</label><input type="tel" value="${esc(c.phone)}" onchange="upd('${c.id}','phone',this.value)">
+    <label>メモ(好み・NGなど)</label><textarea rows="2" onchange="upd('${c.id}','note',this.value)">${esc(c.note)}</textarea>
+    <label>タグ(カンマ区切り)</label><input value="${esc(c.tags.join(","))}" onchange="updTags('${c.id}',this.value)">
+  </div>
+  <div class="card"><b>来店履歴</b>
+    ${s.vs.map(v => `<div style="padding:8px 0;border-top:1px solid #3a3560">
+      <div class="row" style="justify-content:space-between"><span>${v.date} ・ ${v.people}名</span><span class="amt">${yen(v.amount)}</span></div>
+      <div class="muted">${v.pay}${v.pay === "貸し" ? (v.paid ? "(回収済)" : "(<span class='warn'>未収</span>)") : ""}${v.receipt ? ` ・ 領収書:${esc(v.addressee)}` : ""}</div>
+      ${v.memo ? `<div>💬 ${esc(v.memo)}</div>` : ""}</div>`).join("") || '<div class="muted">履歴なし</div>'}
+  </div>`;
+}
+function upd(id, k, v) { cust(id)[k] = (k.startsWith("birth") && v !== "") ? Number(v) : v; save(); render(); }
+function updTags(id, v) { cust(id).tags = [...new Set(v.split(/[,、]/).map(t => t.trim()).filter(Boolean))]; save(); render(); }
+
+function viewUnpaid() {
+  const list = db.visits.filter(v => v.pay === "貸し" && !v.paid).sort((a, b) => a.date.localeCompare(b.date));
+  const total = list.reduce((s, v) => s + Number(v.amount), 0);
+  return `<div class="card"><div class="stat"><b>${yen(total)}</b>未収合計 (${list.length}件)</div></div>
+  ${list.map(v => `<div class="card"><div class="row" style="justify-content:space-between">
+    <b onclick="openDetail('${v.customerId}')">${esc(cust(v.customerId)?.name)}</b><span class="amt">${yen(v.amount)}</span></div>
+    <div class="muted">${v.date} ・ ${v.people}名</div>
+    <button class="sm" style="margin-top:8px" onclick="collect('${v.id}')">回収済にする</button></div>`).join("") || '<div class="muted" style="text-align:center">未収はありません 🎉</div>'}`;
+}
+function collect(id) { db.visits.find(v => v.id === id).paid = true; save(); toast("回収済にしました"); render(); }
+
+let installPrompt = null;
+const installButton = $("#install");
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  installPrompt = event;
+  installButton.textContent = "📲 アプリ追加";
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  installButton.textContent = "追加済み";
+});
+installButton.addEventListener("click", async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    return;
+  }
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  alert(ios
+    ? "Safari の共有ボタンをタップし、「ホーム画面に追加」を選んでください。"
+    : "ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。HTTPSで公開されたURLから開く必要があります。");
+});
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").catch(error => console.error("Service worker registration failed", error));
+}
+render();
+if (DEMO) {
+  $("#demo-notice").hidden = false;
+  setStatus("操作デモ");
+} else if (location.protocol.startsWith("http")) {
+  pull();
+  setInterval(() => pull(false), 15000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull(false); });
+}
+</script>
+</body>
+</html>
