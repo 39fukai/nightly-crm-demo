@@ -4,47 +4,50 @@
 <meta charset="utf-8">
 <meta name="app-mode" content="demo">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#14121f">
+<meta name="theme-color" content="#fff7fa">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="日報CRM">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.json">
-<title>夜の日報CRM</title>
+<title>日報CRM</title>
 <style>
+:root{color-scheme:light;--bg:#fff7fa;--surface:#fff;--surface-soft:#fff0f5;--pink:#d94f83;--pink-strong:#bd356a;--pink-pale:#ffe2ec;--border:#f0cbd9;--text:#382832;--muted:#806c76;--danger:#bf334f;--shadow:0 2px 10px rgba(127,55,83,.07)}
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:#14121f;color:#eee;padding-bottom:76px}
-header{padding:10px 12px;font-weight:700;font-size:16px;background:#1f1b33;position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px}
-header small{font-weight:400;color:#aaa;font-size:12px}
-#install{flex:none;padding:7px 9px;border:1px solid #625a87;border-radius:8px;background:#302b48;color:#ffcf5c;font-size:12px}
+body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:var(--bg);color:var(--text);padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+header{padding:10px 12px;font-weight:700;font-size:16px;background:var(--surface);color:var(--text);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px}
+header small{font-weight:400;color:var(--muted);font-size:12px}
+#install{flex:none;padding:7px 9px;border:1px solid var(--pink);border-radius:8px;background:var(--surface-soft);color:var(--pink-strong);font-size:12px}
 #syncinfo{min-width:0;text-align:right}
 main{padding:12px;max-width:640px;margin:auto}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#1f1b33;padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;padding:14px 0;background:none;border:0;color:#999;font-size:13px}
-nav button.on{color:#ffcf5c;font-weight:700}
-.card{background:#231f3a;border-radius:12px;padding:12px;margin-bottom:10px}
-label{display:block;font-size:12px;color:#aaa;margin:12px 0 4px}
-input,textarea,select{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #3a3560;background:#171428;color:#fff}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 0;background:none;border:0;color:var(--muted);font-size:13px}
+nav button.on{color:var(--pink-strong);font-weight:700}
+.card{background:var(--surface);border:1px solid #f4e3e9;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:var(--shadow)}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+input,textarea,select{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text)}
+input:focus,textarea:focus,select:focus{outline:2px solid #ed9fbc;outline-offset:1px;border-color:var(--pink)}
 .row{display:flex;gap:8px;align-items:center}
 .seg{display:flex;gap:8px}
-.seg button{flex:1;padding:14px 4px;font-size:16px;border-radius:10px;border:2px solid #3a3560;background:#171428;color:#ddd}
-.seg button.on{border-color:#ffcf5c;background:#3a3150;color:#ffcf5c;font-weight:700}
-.step{width:52px;height:52px;font-size:24px;border-radius:10px;border:0;background:#3a3560;color:#fff}
+.seg button{flex:1;padding:14px 4px;font-size:16px;border-radius:10px;border:2px solid var(--border);background:#fff;color:var(--text)}
+.seg button.on{border-color:var(--pink);background:var(--pink-pale);color:var(--pink-strong);font-weight:700}
+.step{width:52px;height:52px;font-size:24px;border-radius:10px;border:1px solid var(--border);background:var(--surface-soft);color:var(--pink-strong)}
 .num{font-size:26px;min-width:48px;text-align:center}
-.big{width:100%;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:12px;background:#ffcf5c;color:#222;margin-top:16px}
-.tag{display:inline-block;background:#3a3560;border-radius:12px;padding:3px 10px;font-size:12px;margin:2px 4px 2px 0}
-.tag.vip{background:#b8860b;color:#fff}
-.tag.pick{cursor:pointer}.tag.pick.on{background:#ffcf5c;color:#222}
-.muted{color:#999;font-size:12px}
-.amt{color:#ffcf5c;font-weight:700}
-.warn{color:#ff7b7b}
+.big{width:100%;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:12px;background:var(--pink);color:#fff;margin-top:16px}
+.big:active{background:var(--pink-strong)}
+.tag{display:inline-block;background:var(--pink-pale);color:#8f3659;border-radius:12px;padding:3px 10px;font-size:12px;margin:2px 4px 2px 0}
+.tag.vip{background:#ffe5a7;color:#714c00}
+.tag.pick{cursor:pointer}.tag.pick.on{background:var(--pink);color:#fff}
+.muted{color:var(--muted);font-size:12px}
+.amt{color:var(--pink-strong);font-weight:700}
+.warn{color:var(--danger)}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.stat{background:#171428;border-radius:8px;padding:8px;text-align:center}
-.stat b{display:block;font-size:20px;color:#ffcf5c}
-.banner{background:#4a2a5a;border-radius:10px;padding:10px;margin-bottom:10px}
-.sm{padding:8px 12px;font-size:13px;border-radius:8px;border:0;background:#3a3560;color:#fff}
-.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#2e7d32;padding:10px 18px;border-radius:20px;z-index:9}
+.stat{background:var(--surface-soft);border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:20px;color:var(--pink-strong)}
+.banner{background:#ffe5ef;color:#73364f;border:1px solid #f4bfd2;border-radius:10px;padding:10px;margin-bottom:10px}
+.sm{padding:8px 12px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--surface-soft);color:var(--pink-strong)}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#378252;color:#fff;padding:10px 18px;border-radius:20px;z-index:9}
 </style>
 </head>
 <body>

@@ -5,8 +5,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#14121f",
-  "theme_color": "#14121f",
+  "background_color": "#fff7fa",
+  "theme_color": "#fff7fa",
   "description": "飲食店の日報と顧客管理",
   "categories": ["business", "productivity"],
   "icons": [
