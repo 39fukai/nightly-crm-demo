@@ -1,4 +1,4 @@
-const CACHE = "nightly-crm-v4-" + self.registration.scope;
+const CACHE = "nightly-crm-v5-" + self.registration.scope;
 const CORE = ["./", "index.html", "manifest.json", "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png"]
   .map(file => new URL(file, self.registration.scope).href);
 

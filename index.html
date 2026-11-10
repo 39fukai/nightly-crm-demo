@@ -75,7 +75,7 @@ let detailId = null;
 
 function blank() {
   return { date: dstr(new Date()), customerId: "", newName: "", people: 1, amount: "", pay: "カード",
-           receipt: false, addressee: "", companions: "", memo: "", tags: [] };
+           cardName: "", receipt: false, addressee: "", companions: "", memo: "", tags: [] };
 }
 function load() {
   try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.customers && d.visits) return d; } catch (e) {}
@@ -251,6 +251,7 @@ function viewInput() {
     <input id="amount" type="text" inputmode="numeric" placeholder="例 45000" value="${esc(f.amount)}" oninput="visitForm.amount=this.value">
     <label>支払い方法</label>
     <div class="seg">${PAY.map(p => `<button class="${f.pay === p ? "on" : ""}" onclick="visitForm.pay='${p}';render()">${p}</button>`).join("")}</div>
+    ${f.pay === "カード" ? `<label for="card-name">カード名義(任意)</label><input id="card-name" type="text" autocomplete="cc-name" placeholder="カードに記載の名義" value="${esc(f.cardName)}" oninput="visitForm.cardName=this.value">` : ""}
     <label>領収書</label>
     <div class="seg">
       <button class="${!f.receipt ? "on" : ""}" onclick="visitForm.receipt=false;render()">なし</button>
@@ -288,7 +289,8 @@ function submitVisit() {
   c.tags = [...new Set([...c.tags, ...visitForm.tags])];
   db.visits.push({ id: uid(), date: visitForm.date, customerId: c.id, people: visitForm.people, amount: Number(amountText),
     companions: visitForm.companions.split(/[\n、,，]/).map(name => name.trim()).filter(Boolean),
-    pay: visitForm.pay, paid: visitForm.pay !== "貸し", receipt: visitForm.receipt, addressee: visitForm.receipt ? visitForm.addressee.trim() : "", memo: visitForm.memo.trim() });
+    pay: visitForm.pay, cardName: visitForm.pay === "カード" ? visitForm.cardName.trim() : "", paid: visitForm.pay !== "貸し",
+    receipt: visitForm.receipt, addressee: visitForm.receipt ? visitForm.addressee.trim() : "", memo: visitForm.memo.trim() });
   save(); visitForm = blank(); toast("保存しました ✔"); render(); scrollTo(0, 0);
 }
 
@@ -411,6 +413,7 @@ function viewDetail(c) {
     ${s.vs.map(v => `<div style="padding:8px 0;border-top:1px solid #3a3560">
       <div class="row" style="justify-content:space-between"><span>${v.date} ・ ${v.people}名</span><span class="amt">${yen(v.amount)}</span></div>
       <div class="muted">${v.pay}${v.pay === "貸し" ? (v.paid ? "(回収済)" : "(<span class='warn'>未収</span>)") : ""}${v.receipt ? ` ・ 領収書:${esc(v.addressee)}` : ""}</div>
+      ${v.pay === "カード" && v.cardName ? `<div class="muted">カード名義: ${esc(v.cardName)}</div>` : ""}
       ${(v.companions || []).length ? `<div class="muted">お連れ様: ${v.companions.map(esc).join("、")}</div>` : ""}
       ${v.memo ? `<div>💬 ${esc(v.memo)}</div>` : ""}</div>`).join("") || '<div class="muted">履歴なし</div>'}
   </div>`;
