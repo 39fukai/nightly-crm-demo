@@ -75,7 +75,7 @@ let detailId = null;
 
 function blank() {
   return { date: dstr(new Date()), customerId: "", newName: "", people: 1, amount: "", pay: "カード",
-           receipt: false, addressee: "", memo: "", tags: [] };
+           receipt: false, addressee: "", companions: "", memo: "", tags: [] };
 }
 function load() {
   try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.customers && d.visits) return d; } catch (e) {}
@@ -242,6 +242,8 @@ function viewInput() {
     <datalist id="cl">${db.customers.map(x => `<option value="${esc(x.name)}">`).join("")}</datalist>
     <label>人数</label>
     <div class="row"><button class="step" onclick="people(-1)">−</button><span class="num">${f.people}</span><button class="step" onclick="people(1)">＋</button><span class="muted">名</span></div>
+    <label>お連れ様のお名前(任意)</label>
+    <textarea rows="2" placeholder="例: 山田 花子&#10;複数名は改行または読点で区切れます" oninput="form.companions=this.value">${esc(f.companions)}</textarea>
     <label>金額(円)</label>
     <input type="number" inputmode="numeric" placeholder="例 45000" value="${f.amount}" oninput="form.amount=this.value">
     <label>支払い方法</label>
@@ -279,6 +281,7 @@ function submitVisit() {
   if (!c) { c = { id: uid(), name, birthMonth: "", birthDay: "", birthYear: "", phone: "", note: "", tags: [] }; db.customers.push(c); }
   c.tags = [...new Set([...c.tags, ...form.tags])];
   db.visits.push({ id: uid(), date: form.date, customerId: c.id, people: form.people, amount: Number(form.amount),
+    companions: form.companions.split(/[\n、,，]/).map(name => name.trim()).filter(Boolean),
     pay: form.pay, paid: form.pay !== "貸し", receipt: form.receipt, addressee: form.receipt ? form.addressee.trim() : "", memo: form.memo.trim() });
   save(); form = blank(); toast("保存しました ✔"); render(); scrollTo(0, 0);
 }
@@ -402,6 +405,7 @@ function viewDetail(c) {
     ${s.vs.map(v => `<div style="padding:8px 0;border-top:1px solid #3a3560">
       <div class="row" style="justify-content:space-between"><span>${v.date} ・ ${v.people}名</span><span class="amt">${yen(v.amount)}</span></div>
       <div class="muted">${v.pay}${v.pay === "貸し" ? (v.paid ? "(回収済)" : "(<span class='warn'>未収</span>)") : ""}${v.receipt ? ` ・ 領収書:${esc(v.addressee)}` : ""}</div>
+      ${(v.companions || []).length ? `<div class="muted">お連れ様: ${v.companions.map(esc).join("、")}</div>` : ""}
       ${v.memo ? `<div>💬 ${esc(v.memo)}</div>` : ""}</div>`).join("") || '<div class="muted">履歴なし</div>'}
   </div>`;
 }
