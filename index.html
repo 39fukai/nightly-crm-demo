@@ -72,6 +72,7 @@ let tab = "input";
 let visitForm = blank();
 let filter = { q: "", tag: "", sort: "visits", month: "", unpaid: false };
 let detailId = null;
+let dailyDate = dstr(new Date());
 
 function blank() {
   return { date: dstr(new Date()), customerId: "", newName: "", people: 1, amount: "", pay: "カード",
@@ -316,6 +317,15 @@ function viewHome() {
     <div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:8px">
     ${days.map(d => `<div style="flex:1;background:#ffcf5c;height:${Math.max(4, byDay[d] / max * 100)}%;border-radius:3px 3px 0 0" title="${d} ${yen(byDay[d])}"></div>`).join("") || '<span class="muted">データなし</span>'}
     </div></div>
+  <div class="card">
+    <b>📅 日付ごとの来店者</b>
+    <div class="row" style="margin-top:8px">
+      <button class="sm" aria-label="前の日" onclick="shiftDailyDate(-1)">‹</button>
+      <input id="daily-date" type="date" aria-label="来店日を選択" value="${esc(dailyDate)}" onchange="setDailyDate(this.value)" style="flex:1">
+      <button class="sm" aria-label="次の日" onclick="shiftDailyDate(1)">›</button>
+    </div>
+    <div id="daily-list">${dailyListHtml(dailyDate)}</div>
+  </div>
   <div class="card"><b>🎂 30日以内の誕生日</b>
     ${bdays.map(x => `<div class="row" style="justify-content:space-between;padding:6px 0" onclick="openDetail('${x.c.id}')"><span>${esc(x.c.name)}</span><span class="muted">${x.c.birthMonth}/${x.c.birthDay}(あと${x.d}日)</span></div>`).join("") || '<div class="muted">該当なし</div>'}
   </div>
@@ -323,6 +333,44 @@ function viewHome() {
     ${gone.map(x => `<div class="row" style="justify-content:space-between;padding:6px 0" onclick="openDetail('${x.c.id}')"><span>${esc(x.c.name)}</span><span class="muted">最終 ${x.s.last}</span></div>`).join("") || '<div class="muted">該当なし</div>'}
   </div>
   <div class="card"><button class="sm" onclick="resetDemo()">デモデータに戻す</button></div>`;
+}
+function dailyListHtml(date) {
+  const visits = db.visits.filter(v => v.date === date)
+    .sort((a, b) => (cust(a.customerId)?.name || "").localeCompare(cust(b.customerId)?.name || "", "ja"));
+  const people = visits.reduce((sum, v) => sum + Number(v.people || 0), 0);
+  const sales = visits.reduce((sum, v) => sum + Number(v.amount || 0), 0);
+  return `<div class="stats" style="margin-top:8px">
+      <div class="stat"><b>${visits.length}</b>来店組数</div>
+      <div class="stat"><b>${people}</b>合計人数</div>
+      <div class="stat" style="grid-column:span 2"><b>${yen(sales)}</b>売上</div>
+    </div>
+    ${visits.map(v => {
+      const c = cust(v.customerId);
+      return `<div style="padding:10px 0;border-top:1px solid #3a3560">
+        <div class="row" style="justify-content:space-between;gap:4px">
+          <b>${c ? `<span role="link" tabindex="0" onclick="openDetail('${v.customerId}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDetail('${v.customerId}')}" style="cursor:pointer">${esc(c.name)}</span>` : "不明なお客様"}</b>
+          <span class="amt">${yen(v.amount)}</span>
+        </div>
+        <div class="muted">${Number(v.people) || 0}名 ・ ${esc(v.pay || "")}${v.pay === "カード" && v.cardName ? ` ・ 名義:${esc(v.cardName)}` : ""}${v.pay === "貸し" && !v.paid ? " ・ <span class='warn'>未収</span>" : ""}</div>
+        ${(v.companions || []).length ? `<div class="muted">お連れ様: ${v.companions.map(esc).join("、")}</div>` : ""}
+        ${v.memo ? `<div>💬 ${esc(v.memo)}</div>` : ""}
+      </div>`;
+    }).join("") || '<div class="muted" style="text-align:center;padding:12px">この日の来店記録はありません</div>'}`;
+}
+function setDailyDate(date) {
+  if (!date) return;
+  dailyDate = date;
+  const list = $("#daily-list");
+  if (list) list.innerHTML = dailyListHtml(dailyDate);
+}
+function shiftDailyDate(amount) {
+  const date = new Date(`${dailyDate}T12:00:00`);
+  date.setDate(date.getDate() + amount);
+  dailyDate = dstr(date);
+  const input = $("#daily-date");
+  if (input) input.value = dailyDate;
+  const list = $("#daily-list");
+  if (list) list.innerHTML = dailyListHtml(dailyDate);
 }
 function resetDemo() {
   if (!confirm("全データをデモデータに戻します。よろしいですか?")) return;
